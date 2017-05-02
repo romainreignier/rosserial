@@ -42,32 +42,6 @@
 #include "rosserial_msgs/Log.h"
 #include "rosserial_msgs/RequestParam.h"
 
-#define SYNC_SECONDS        5
-
-#define MODE_FIRST_FF       0
-/*
- * The second sync byte is a protocol version. It's value is 0xff for the first
- * version of the rosserial protocol (used up to hydro), 0xfe for the second version
- * (introduced in hydro), 0xfd for the next, and so on. Its purpose is to enable
- * detection of mismatched protocol versions (e.g. hydro rosserial_python with groovy
- * rosserial_arduino. It must be changed in both this file and in
- * rosserial_python/src/rosserial_python/SerialClient.py
- */
-#define MODE_PROTOCOL_VER   1
-#define PROTOCOL_VER1		0xff // through groovy
-#define PROTOCOL_VER2		0xfe // in hydro
-#define PROTOCOL_VER 		PROTOCOL_VER2
-#define MODE_SIZE_L         2
-#define MODE_SIZE_H         3
-#define MODE_SIZE_CHECKSUM  4   // checksum for msg size received from size L and H
-#define MODE_TOPIC_L        5   // waiting for topic id
-#define MODE_TOPIC_H        6
-#define MODE_MESSAGE        7
-#define MODE_MSG_CHECKSUM   8   // checksum for msg and topic id
-
-
-#define MSG_TIMEOUT 20  //20 milliseconds to recieve all of message data
-
 #include "ros/msg.h"
 
 namespace ros {
@@ -88,6 +62,38 @@ namespace ros {
 namespace ros {
 
   using rosserial_msgs::TopicInfo;
+
+  const uint8_t SYNC_SECONDS  = 5;
+  const uint8_t MSG_TIMEOUT   = 20; // 20 milliseconds to recieve all of message data
+
+  /*
+   * The second sync byte is a protocol version. It's value is 0xff for the first
+   * version of the rosserial protocol (used up to hydro), 0xfe for the second version
+   * (introduced in hydro), 0xfd for the next, and so on. Its purpose is to enable
+   * detection of mismatched protocol versions (e.g. hydro rosserial_python with groovy
+   * rosserial_arduino. It must be changed in both this file and in
+   * rosserial_python/src/rosserial_python/SerialClient.py
+   */
+  const uint8_t PROTOCOL_VER1 = 0xff; // through groovy
+  const uint8_t PROTOCOL_VER2 = 0xfe; // in hydro
+  const uint8_t PROTOCOL_VER  = PROTOCOL_VER2;
+
+  enum Mode {
+    MODE_FIRST_FF,
+    MODE_PROTOCOL_VER,
+    MODE_SIZE_L,
+    MODE_SIZE_H,
+    MODE_SIZE_CHECKSUM, // checksum for msg size received from size L and H
+    MODE_TOPIC_L,       // waiting for topic id
+    MODE_TOPIC_H,
+    MODE_MESSAGE,
+    MODE_MSG_CHECKSUM   // checksum for msg and topic id
+  };
+
+  Mode operator++(const Mode& mode)
+  {
+      return Mode(mode + 1);
+  }
 
   /* Node Handle */
   template<class Hardware,
@@ -145,7 +151,7 @@ namespace ros {
       /* Start serial, initialize buffers */
       void initNode(){
         hardware_.init();
-        mode_ = 0;
+        mode_ = MODE_FIRST_FF;
         bytes_ = 0;
         index_ = 0;
         topic_ = 0;
@@ -154,15 +160,15 @@ namespace ros {
       /* Start a named port, which may be network server IP, initialize buffers */
       void initNode(char *portName){
         hardware_.init(portName);
-        mode_ = 0;
+        mode_ = MODE_FIRST_FF;
         bytes_ = 0;
         index_ = 0;
         topic_ = 0;
       };
 
     protected:
-      //State machine variables for spinOnce
-      int mode_;
+      // State machine variables for spinOnce
+      Mode mode_;
       int bytes_;
       int topic_;
       int index_;
